@@ -28,8 +28,9 @@ example, a tuple of items.  In this case, one may override the comparison by
 setting options.comparer to a function taking two arguments, and returning true
 if and only if they are equal (and otherwise false).  This module provides one
 such helper, `tuples`, which is useful in the case of state machines whose state
-is more than one variable.  For an example of this, see circuit-networks.lua,
-and also see the comments on tuples for additional information.
+is more than one variable.  For an example of this, see
+ui/low-level/multistate-switch.lua, and also see the comments on tuples for
+additional information.
 
 A helper, kv_list, can be used like this:
 
