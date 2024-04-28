@@ -144,7 +144,6 @@ function _m.next(list, current_key)
    local next_i = math_helpers.mod1(i + 1, #list.values)
    -- <= because lists of 1 item always wrap back to the same index.
    local wrapped = next_i <= i
-   print(next_i)
    return { key = list.values[next_i].key, value = list.values[next_i].value, wrapped = wrapped }
 end
 
