@@ -28,7 +28,7 @@ local fa_travel = require("scripts.travel-tools")
 local fa_teleport = require("scripts.teleport")
 local fa_warnings = require("scripts.warnings")
 
-local circuit_networks = require('circuit-networks')
+local circuit_networks = require('scripts.circuit-networks')
 
 groups = {}
 entity_types = {}
