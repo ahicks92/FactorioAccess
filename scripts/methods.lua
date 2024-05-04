@@ -57,7 +57,7 @@ on declaration of methods, capturing the methods so declared.  The wrapper then
 just installs the unique metatable.
 ]]
 
-local _m = {}
+local mod = {}
 
 -- This cache prevents us from having to make unique closures every time, by
 -- making the closure only once and then consulting it here.  Keys are unique
@@ -80,7 +80,7 @@ local function maybe_register(name, metatable)
    end
 end
 
-function _m.link(unique_name, methods_table)
+function mod.link(unique_name, methods_table)
    if seenh_unique_names[unique_name] then
       error("Attempt to double-register " .. unique_name)
    end
@@ -134,7 +134,7 @@ if script == nil then
       self.count = self.count - by
    end
 
-   local linker   = _m.link('methods_self_test', counter_methods)
+   local linker   = mod.link('methods_self_test', counter_methods)
    local instance = { count = 0 }
    linker(instance)
 
@@ -165,4 +165,4 @@ if script == nil then
    assert(count == 0)
 end
 
-return _m
+return mod

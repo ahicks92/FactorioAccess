@@ -60,9 +60,9 @@ Operations are all O(N).
 ]]
 local math_helpers = require('math-helpers')
 
-local _m = {}
+local mod = {}
 
-_m.ANY = {}
+mod.ANY = {}
 
 --[[
 If the keys in this list need to be tuples, this comparer will allow for that by
@@ -90,16 +90,16 @@ fields of the tuple uniquely identify the state. For example:
 Is a list with duplicates because `{ 1, ANY }` matches `{ 1, 2 }`.
 ]]
 
-function _m.tuples(a, b)
+function mod.tuples(a, b)
    if #a ~= #b then return false end
    for i = 1, #a do
-      if a[i] ~= b[i] and a[i] ~= _m.ANY and b[i] ~= _m.ANY then return false end
+      if a[i] ~= b[i] and a[i] ~= mod.ANY and b[i] ~= mod.ANY then return false end
    end
 
    return true
 end
 
-function _m.kv_list(list, comparer)
+function mod.kv_list(list, comparer)
    vals = {}
    for i = 1, #list do
       vals[i] = { key = list[i][1], value = list[i][2] }
@@ -127,7 +127,7 @@ This is basically lookup, but so named because the key is the current
 item--you're owning the place the index is stored, not this module, but it is
 still an index.
 ]]
-function _m.current(list, key)
+function mod.current(list, key)
    local i = find_key_index_or_die(list, key)
    return { key = list.values[i].key, value = list.values[i].value, wrapped = false }
 end
@@ -140,7 +140,7 @@ and wrapped is true if this operation wrapped around to the other end of the
 list.
 ]]
 
-function _m.next(list, current_key)
+function mod.next(list, current_key)
    local i = find_key_index_or_die(list, current_key)
    local next_i = math_helpers.mod1(i + 1, #list.values)
    -- <= because lists of 1 item always wrap back to the same index.
@@ -148,7 +148,7 @@ function _m.next(list, current_key)
    return { key = list.values[next_i].key, value = list.values[next_i].value, wrapped = wrapped }
 end
 
-function _m.prev(list, current_key)
+function mod.prev(list, current_key)
    local i = find_key_index_or_die(list, current_key)
    local prev_i = math_helpers.mod1(i - 1, #list.values)
    -- >= because lists of 1 item always wrap back to the same index.
@@ -156,4 +156,4 @@ function _m.prev(list, current_key)
    return { key = list.values[prev_i].key, value = list.values[prev_i].value, wrapped = wrapped }
 end
 
-return _m
+return mod

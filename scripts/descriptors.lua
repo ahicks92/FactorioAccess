@@ -25,10 +25,10 @@ local F = require('scripts.field-ref')
 
 local dcb = defines.control_behavior
 
-local _m  = {}
+local mod  = {}
 
 -- Prototypes, by type.
-_m.PROTOTYPES = {
+mod.PROTOTYPES = {
    inserter = {
       circuit_network = {
          reading = {
@@ -44,4 +44,4 @@ _m.PROTOTYPES = {
    },
 }
 
-return _m
+return mod

@@ -52,7 +52,7 @@ local circular_list = require('scripts.ds.circular-options-list')
 local F = require('scripts.field-ref') -- for self-tests
 local methods = require('scripts.methods')
 
-local _m = {}
+local mod = {}
 
 --- @alias MultistateSwitchChoices { [1]: any, [2]: string }[]
 
@@ -109,7 +109,7 @@ local linker = methods.link('multistate-switch', multistate_methods)
 
 --- @param opts MultistateSwitchOptions
 --- @returns MultistateSwitch
-function _m.create(opts)
+function mod.create(opts)
    -- What we are actually going to do is compile to a circular list and save
    -- that.
    local instance = {
@@ -140,7 +140,7 @@ end
 
 -- here come the self tests.
 local fake_entity = { on = false, state = 0 }
-local test_switch = _m.create({
+local test_switch = mod.create({
    on_off_field = F.on(),
    state_field = F.state(),
    off_label = "is off",
@@ -175,4 +175,4 @@ assert(test_switch.prev(fake_entity) == "is 1")
 assert(fake_entity.on == true)
 assert(fake_entity.state == 1)
 
-return _m
+return mod
