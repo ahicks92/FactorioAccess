@@ -11,32 +11,64 @@ local fa_zoom = require("scripts.zoom")
 local fa_bot_logistics = require("scripts.worker-robots")
 
 local mod = {}
+
+-- Removing from tables  while preserving order is O(N).  Removing tables while
+-- not preserving order is O(1), implemented by swapping the index to be removed
+-- with the back, then setting the back to nil.  Because Lua's table length
+-- operator is actually O(log N), this function also technically is, but that
+-- trends towards constant-ish behavior for practical purposes and, for the time
+-- being, is the best we can do without further abstractions.
+--
+--- @param table table
+--- @param index number
+local function swap_remove(table, index)
+   local len = #table
+   -- Get the back
+   local tmp = table[len]
+   -- Copy it to the index to be removed.
+   table[index] = tmp
+   -- Delete the back
+   table[len] = nil
+end
+
+-- Determine which of two positions is closer to a reference, that is `e1
+-- closer_than e2`.
+--
+-- This is faster than comparing squared distances.
+--
+--- @param reference { x: number, y: number }
+-- @param e1 { x: number, y: number } The first entity's position.
+-- @param e2 { x: number, y: number } the second entity's position.
+local function closer_to(reference, e1, e2)
+   -- Ok so: this is faster for a simple reason.  We can first check whether or
+   -- not the absolute values of both coordinate distances establish the
+   -- relationship.  This happens most of the time.  If that doesn't do it, we
+   -- can do the squared check, but in this instance we will do so by avoiding
+   -- table lookups which can't be avoided if the checks are done individually.
+
+   -- Look up the reference distances.
+   local rx = reference.x
+   local ry = reference.y
+   local e1x = e1.x
+   local e1y = e1.y
+   local e2x = e2.x
+   local e2y = e2.y
+
+   -- If a position is closer on both coordinate axes, then it is closer, no
+   -- Pythagorean required.
+   if math.abs(rx - e1x) < math.abs(rx - e2x) and math.abs(ry - e1y) < math.abs(ry - e2y) then return true end
+
+   -- Fine, pythagorean time.
+   return (rx - e1x) ^ 2 + (ry - e1y) ^ 2 < (rx - e2x) ^ 2 + (ry - e2y) ^ 2
+end
+
 --Find islands of resources or water or trees to create the aggregate entries in the scanner list. Does not run for every scan.
 function mod.find_islands(surf, area, pindex)
    local islands = {}
    local ents = surf.find_entities_filtered({ area = area, type = "resource" })
    local waters = surf.find_tiles_filtered({ area = area, name = "water" })
    local trents = surf.find_entities_filtered({ area = area, type = "tree" })
-   --   if trents ~= nil and #trents > 0 then      printout("trees galore", pindex) end
-   local i = 1
-   while i <= #trents do
-      local trent = trents[i]
-      local check = (
-         trent.position.x >= area.left_top.x
-         and trent.position.y >= area.left_top.y
-         and trent.position.x < area.right_bottom.x
-         and trent.position.y < area.right_bottom.y
-      )
 
-      if check == false then
-         table.remove(trents, i)
-      else
-         i = i + 1
-      end
-   end
-   if #trents > 0 then
-      --printout("trees galore", pindex) **beta
-   end
    if #ents == 0 and #waters == 0 and #trents == 0 then return {} end
 
    for i, ent in ipairs(ents) do
@@ -115,7 +147,6 @@ function mod.find_islands(surf, area, pindex)
             end
          end
          if resource.edge then
-            --            table.insert(entry.edges, pos)
             entry.edges[pos] = false
             if fa_utils.area_edge(area, 0, position, name) then
                entry.neighbors[0] = true
@@ -176,7 +207,7 @@ function mod.scan_area(x, y, w, h, pindex, filter_direction, start_with_existing
       local index = #result
       for group, patch in pairs(resource.patches) do
          local nearest_edge = fa_utils.nearest_edge(patch.edges, pos, name)
-         --Filter check 1: Is the entity in the filter diection? (If a filter is set at all)
+         --Filter check 1: Is the entity in the filter direction? (If a filter is set at all)
          local dir_of_ent = fa_utils.get_direction_biased(nearest_edge, pos)
          local filter_passed = (filter_direction == nil or filter_direction == dir_of_ent)
          if not filter_passed then
@@ -208,21 +239,23 @@ function mod.scan_area(x, y, w, h, pindex, filter_direction, start_with_existing
       end
       --Remove empty entries
       if result[index].ents == nil or result[index].ents == {} or result[index].ents[1] == nil then
-         table.remove(result, index)
+         swap_remove(result, index)
       end
    end
 
    --Insert entities to the initial list
-   for i = 1, #ents, 1 do
+   for i = 1, #ents do
       local extra_entry_info = mod.ent_extra_list_info(ents[i], pindex, false)
       local scan_entry = ents[i].name .. extra_entry_info
       local index = fa_utils.index_of_entity(result, scan_entry)
 
-      --Filter check 1: Is the entity in the filter diection? (If a filter is set at all)
+      --Filter check 1: Is the entity in the filter direction? (If a filter is
+      --set at all)
       local dir_of_ent = fa_utils.get_direction_biased(ents[i].position, pos)
       local filter_passed = (filter_direction == nil or filter_direction == dir_of_ent)
       if not filter_passed then
-         --Filter check 2: Is the entity nearby and almost within the filter diection?
+         --Filter check 2: Is the entity nearby and almost within the filter
+         --direction?
          if util.distance(ents[i].position, pos) < close_object_limit then
             local new_dir_of_ent = fa_utils.get_direction_precise(ents[i].position, pos) --Check with less bias towards diagonal directions to preserve 135 degrees FOV
             local CW_dir = (filter_direction + 1) % (2 * dirs.south)
@@ -239,13 +272,12 @@ function mod.scan_area(x, y, w, h, pindex, filter_direction, start_with_existing
          if index == nil then --The entry is not already indexed, so add a new entry line to the list
             table.insert(result, { name = scan_entry, count = 1, ents = { ents[i] }, aggregate = false })
          elseif #result[index] >= 100 then --If there are more than 100 instances of this specific entry (?), replace a random one of them to add this
-            table.remove(result[index].ents, math.random(100))
-            table.insert(result[index].ents, ents[i])
+            local tmp_ind = math.random(100)
+            result[index].ents = ents[i]
             result[index].count = result[index].count + 1
          else
             table.insert(result[index].ents, ents[i]) --Add this ent as another instance of the entry
             result[index].count = result[index].count + 1
-            --         result[index] = ents[i]
          end
       end
    end
@@ -260,23 +292,21 @@ function mod.scan_area(x, y, w, h, pindex, filter_direction, start_with_existing
          local ent2 = nil
          if k1.aggregate then
             table.sort(k1.ents, function(k3, k4)
-               return fa_utils.squared_distance(pos, k3.position) < fa_utils.squared_distance(pos, k4.position)
+               return closer_to(pos, k3.position, k4.position)
             end)
             ent1 = k1.ents[1]
-         --            end
          else
             ent1 = surf.get_closest(pos, k1.ents)
          end
          if k2.aggregate then
             table.sort(k2.ents, function(k3, k4)
-               return fa_utils.squared_distance(pos, k3.position) < fa_utils.squared_distance(pos, k4.position)
+               return closer_to(pos, k3.position, k4.position)
             end)
             ent2 = k2.ents[1]
-         --            end
          else
             ent2 = surf.get_closest(pos, k2.ents)
          end
-         return util.distance(pos, ent1.position) < util.distance(pos, ent2.position)
+         return closer_to(pos, ent1.position, ent2.position)
       end)
    else
       --Sort results by count
@@ -303,11 +333,12 @@ function mod.scan_nearby_trees(pindex, filter_direction, radius_in)
    --Insert entities to the initial list
    for i = 1, #ents, 1 do
       local index = fa_utils.index_of_entity(result, scan_entry)
-      --Filter check 1: Is the entity in the filter diection? (If a filter is set at all)
+      --Filter check 1: Is the entity in the filter direction? (If a filter is
+      --set at all)
       local dir_of_ent = fa_utils.get_direction_biased(ents[i].position, pos)
       local filter_passed = (filter_direction == nil or filter_direction == dir_of_ent)
       if not filter_passed then
-         --Filter check 2: Is the entity nearby and almost within the filter diection?
+         --Filter check 2: Is the entity nearby and almost within the filter direction?
          if util.distance(ents[i].position, pos) < close_object_limit then
             local new_dir_of_ent = fa_utils.get_direction_precise(ents[i].position, pos) --Check with less bias towards diagonal directions to preserve 135 degrees FOV
             local CW_dir = (filter_direction + 1) % (2 * dirs.south)
@@ -323,13 +354,12 @@ function mod.scan_nearby_trees(pindex, filter_direction, radius_in)
          if index == nil then --The entry is not already indexed, so add a new entry line to the list
             table.insert(result, { name = scan_entry, count = 1, ents = { ents[i] }, aggregate = false })
          elseif #result[index] >= 100 then --If there are more than 100 instances of this specific entry (?), replace a random one of them to add this
-            table.remove(result[index].ents, math.random(100))
-            table.insert(result[index].ents, ents[i])
+            local tmp_ind = math.random(100)
+            result[index].ents = ents[i]
             result[index].count = result[index].count + 1
          else
             table.insert(result[index].ents, ents[i]) --Add this ent as another instance of the entry
             result[index].count = result[index].count + 1
-            --         result[index] = ents[i]
          end
       end
    end
@@ -352,6 +382,7 @@ function mod.populate_list_categories(pindex)
          table.insert(players[pindex].nearby.resources, ent)
       else
          while #ent.ents > 0 and ent.ents[1].valid == false do
+            -- there is no sort later, so we can't optimize this yet.
             table.remove(ent.ents, 1)
          end
          if #ent.ents == 0 then
@@ -398,14 +429,6 @@ function mod.populate_list_categories(pindex)
          end
       end
    end
-   --for debugging
-   -- game.print("resource count: "  .. #players[pindex].nearby.resources,{volume_modifier = 0})
-   -- game.print("container count: " .. #players[pindex].nearby.containers,{volume_modifier = 0})
-   -- game.print("buildings count: " .. #players[pindex].nearby.buildings,{volume_modifier = 0})
-   -- game.print("vehicles count: "  .. #players[pindex].nearby.vehicles,{volume_modifier = 0})
-   -- game.print("'players' count: " .. #players[pindex].nearby.players,{volume_modifier = 0})
-   -- game.print("enemies count: "   .. #players[pindex].nearby.enemies,{volume_modifier = 0})
-   -- game.print("other count: "     .. #players[pindex].nearby.other,{volume_modifier = 0})
 end
 
 --Run the entity scanner tool ("rescan")
@@ -469,8 +492,8 @@ function mod.list_sort(pindex)
    for i, name in ipairs(players[pindex].nearby.ents) do
       local i1 = 1
       while i1 <= #name.ents do --this appears to be removing invalid ents within a set.
-         if name.ents[i1] == nil or (name.ents[i1].valid == false and name.aggregate == false) then
-            table.remove(name.ents, i1)
+         if name.ents[i1].valid == false and name.aggregate == false then
+            swap_remove(name.ents, i1)
          else
             i1 = i1 + 1
          end
@@ -482,20 +505,20 @@ function mod.list_sort(pindex)
 
    if players[pindex].nearby.count == false then
       --Sort by distance to player position
+      local pos = players[pindex].position
+      local surf = game.get_player(pindex).surface
       table.sort(players[pindex].nearby.ents, function(k1, k2)
-         local pos = players[pindex].position
-         local surf = game.get_player(pindex).surface
          local ent1 = nil
          local ent2 = nil
          if k1.name == "water" then
             table.sort(k1.ents, function(k3, k4)
-               return fa_utils.squared_distance(pos, k3.position) < fa_utils.squared_distance(pos, k4.position)
+               return closer_to(pos, k3.position, k4.position)
             end)
             ent1 = k1.ents[1]
          else
             if k1.aggregate then
                table.sort(k1.ents, function(k3, k4)
-                  return fa_utils.squared_distance(pos, k3.position) < fa_utils.squared_distance(pos, k4.position)
+                  return closer_to(pos, k3.position, k4.position)
                end)
                ent1 = k1.ents[1]
             else
@@ -504,20 +527,21 @@ function mod.list_sort(pindex)
          end
          if k2.name == "water" then
             table.sort(k2.ents, function(k3, k4)
-               return fa_utils.squared_distance(pos, k3.position) < fa_utils.squared_distance(pos, k4.position)
+               return closer_to(pos, k3.position, k4.position)
             end)
             ent2 = k2.ents[1]
          else
             if k2.aggregate then
                table.sort(k2.ents, function(k3, k4)
-                  return fa_utils.squared_distance(pos, k3.position) < fa_utils.squared_distance(pos, k4.position)
+                  return closer_to(pos, k3.position, k4.position)
                end)
                ent2 = k2.ents[1]
             else
                ent2 = surf.get_closest(pos, k2.ents)
             end
          end
-         return fa_utils.squared_distance(pos, ent1.position) < fa_utils.squared_distance(pos, ent2.position)
+
+         return closer_to(pos, ent1.position, ent2.position)
       end)
    else
       --Sort table by count
@@ -603,10 +627,11 @@ function mod.list_index(pindex)
             mod.list_index(pindex)
             return
          end
+
          --Sort by distance to player pos while describing indexed entries
+         local pos = players[pindex].position
          table.sort(ents[players[pindex].nearby.index].ents, function(k1, k2)
-            local pos = players[pindex].position
-            return fa_utils.squared_distance(pos, k1.position) < fa_utils.squared_distance(pos, k2.position)
+            return closer_to(pos, k1.position, k2.position)
          end)
          if players[pindex].nearby.selection > #ents[players[pindex].nearby.index].ents then
             players[pindex].selection = 1
@@ -799,9 +824,11 @@ function mod.area_scan_summary_info(scan_left_top, scan_right_bottom, pindex)
    }
    local count = 0
    local total = 0
+   local surf = game.get_player(pindex).surface
+
    for i = explored_left_top.x, explored_right_bottom.x do
       for i1 = explored_left_top.y, explored_right_bottom.y do
-         if game.get_player(pindex).surface.is_chunk_generated({ i, i1 }) then count = count + 1 end
+         if surf.is_chunk_generated({ i, i1 }) then count = count + 1 end
          total = total + 1
       end
    end
@@ -814,7 +841,7 @@ function mod.area_scan_summary_info(scan_left_top, scan_right_bottom, pindex)
 
    local percentages = {}
    local percent_total = 0
-   local surf = game.get_player(pindex).surface
+
    --Scan for Tiles and Resources, because they behave weirdly in scan_area due to aggregation, or are skipped
    local percent = 0
    local res_count = surf.count_tiles_filtered({
@@ -986,9 +1013,6 @@ function mod.ent_extra_list_info(ent, pindex, info_comes_after_indexing)
       for name, count in pairs(itemset) do
          table.insert(itemtable, { name = name, count = count })
       end
-      --table.sort(itemtable, function(k1, k2)
-      --   return k1.count > k2.count
-      --end)
       if #itemtable == 0 then
          result = result .. " empty "
       elseif #itemtable == 1 then
@@ -1081,34 +1105,10 @@ end
 --Examines a forest position and classifies it by tree density. Used for the scanner list.
 function mod.classify_forest(position, pindex, drawing)
    local tree_count = 0
-   local tree_group = game
+   local tree_count = game
       .get_player(pindex).surface
-      .find_entities_filtered({ type = "tree", position = position, radius = 16, limit = 15 })
-   if drawing then
-      rendering.draw_circle({
-         color = { 0, 1, 0.25 },
-         radius = 16,
-         width = 4,
-         target = position,
-         surface = game.get_player(pindex).surface,
-         time_to_live = 60,
-         draw_on_ground = true,
-      })
-   end
-   for i, tree in ipairs(tree_group) do
-      tree_count = tree_count + 1
-      if drawing then
-         rendering.draw_circle({
-            color = { 0, 1, 0.5 },
-            radius = 1,
-            width = 4,
-            target = tree.position,
-            surface = tree.surface,
-            time_to_live = 60,
-            draw_on_ground = true,
-         })
-      end
-   end
+      .count_entities_filtered({ type = "tree", position = position, radius = 16, limit = 15 })
+
    if tree_count < 1 then
       return "empty"
    elseif tree_count < 6 then
