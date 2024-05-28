@@ -30,6 +30,9 @@ local fa_warnings = require("scripts.warnings")
 local fa_circuits = require("scripts.circuit-networks")
 local fa_kk = require("scripts.kruise-kontrol-wrapper")
 local fa_quickbar = require("scripts.quickbar")
+local ui = require("scripts.ui")
+-- For hooking on_init, on_configuration_changed.
+local ui_internal = require("scripts.ui.global-state")
 
 groups = {}
 entity_types = {}
@@ -3751,18 +3754,26 @@ script.on_event("pause-game-fa", function(event)
 end)
 
 script.on_event("cursor-up", function(event)
+   if ui.evt_up(event.player_index) then return end
+
    move_key(defines.direction.north, event)
 end)
 
 script.on_event("cursor-down", function(event)
+   if ui.evt_down(event.player_index) then return end
+
    move_key(defines.direction.south, event)
 end)
 
 script.on_event("cursor-left", function(event)
+   if ui.evt_left(event.player_index) then return end
+
    move_key(defines.direction.west, event)
 end)
 
 script.on_event("cursor-right", function(event)
+   if ui.evt_right(event.player_index) then return end
+
    move_key(defines.direction.east, event)
 end)
 
@@ -4623,6 +4634,8 @@ script.on_event(quickbar_set_events, fa_quickbar.quickbar_set_handler)
 script.on_event(quickbar_page_events, fa_quickbar.quickbar_page_handler)
 
 script.on_event("switch-menu-or-gun", function(event)
+   if ui.evt_tab_forward(event.player_index) then return end
+
    pindex = event.player_index
    if not check_for_player(pindex) then return end
 
@@ -4774,6 +4787,8 @@ script.on_event("switch-menu-or-gun", function(event)
 end)
 
 script.on_event("reverse-switch-menu-or-gun", function(event)
+   if ui.evt_tab_backward(event.player_index) then return end
+
    pindex = event.player_index
    if not check_for_player(pindex) then return end
 
@@ -5296,9 +5311,13 @@ script.on_event("click-menu-right", function(event)
    end
 end)
 
-script.on_event("leftbracket-key-id", function(event) end)
+script.on_event("leftbracket-key-id", function(event)
+   if ui.evt_left_click(event.player_index, { ctrl = false, shift = false, alt = false }) then return end
+end)
 
-script.on_event("rightbracket-key-id", function(event) end)
+script.on_event("rightbracket-key-id", function(event)
+   if ui.evt_right_click(event.player_index, { ctrl = false, shift = false, alt = false }) then return end
+end)
 
 --Left click actions in menus (click_menu)
 script.on_event("click-menu", function(event)
@@ -5748,6 +5767,8 @@ end
 
 --Left click actions with items in hand
 script.on_event("click-hand", function(event)
+   if ui.evt_left_click(event.player_index, { ctrl = true, alt = true, shift = true }) then return end
+
    pindex = event.player_index
    if not check_for_player(pindex) then return end
    local p = game.get_player(pindex)
@@ -5909,6 +5930,8 @@ end)
 
 --Right click actions with items in hand
 script.on_event("click-hand-right", function(event)
+   if ui.evt_right_click(event.player_index, { ctrl = false, alt = false, shift = false }) then return end
+
    pindex = event.player_index
    if not check_for_player(pindex) then return end
    local p = game.get_player(pindex)
@@ -5996,6 +6019,8 @@ end)
 
 --Left click actions with no menu and no items in hand
 script.on_event("click-entity", function(event)
+   if ui.evt_left_click(event.player_index, { ctrl = false, shift = false, alt = false }) then return end
+
    pindex = event.player_index
    if not check_for_player(pindex) then return end
    if players[pindex].last_click_tick == event.tick then return end
@@ -6176,6 +6201,8 @@ script.on_event("open-circuit-menu", function(event)
 end)
 
 script.on_event("repair-area", function(event)
+   if ui.evt_left_click(event.player_index, { ctrl = true, shift = true, alt = false }) then return end
+
    pindex = event.player_index
    if not check_for_player(pindex) then return end
    if players[pindex].last_click_tick == event.tick then return end
@@ -6201,6 +6228,8 @@ script.on_event("repair-area", function(event)
 end)
 
 script.on_event("crafting-all", function(event)
+   if ui.evt_left_click(event.player_index, { ctrl = false, shift = true, alt = false }) then return end
+
    pindex = event.player_index
    if not check_for_player(pindex) then return end
    if players[pindex].in_menu then
@@ -6245,6 +6274,8 @@ end)
 
 --Transfers a stack from one inventory to another. Preserves BP data.
 script.on_event("transfer-one-stack", function(event)
+   if ui.evt_left_click(event.player_index, { ctrl = false, shift = true, alt = false }) then return end
+
    pindex = event.player_index
    if not check_for_player(pindex) then return end
    if players[pindex].in_menu then
@@ -6317,6 +6348,8 @@ end)
 
 --You can equip armor, armor equipment, guns, ammo. You can equip from the hand, or from the inventory with an empty hand.
 script.on_event("equip-item", function(event)
+   if ui.evt_left_click(event.player_index, { ctrl = false, shift = true, alt = false }) then return end
+
    pindex = event.player_index
    if not check_for_player(pindex) then return end
    local stack = game.get_player(pindex).cursor_stack
@@ -6357,6 +6390,8 @@ end)
 
 --Has the same input as the ghost placement function and so it uses that
 script.on_event("open-rail-builder", function(event)
+   if ui.evt_left_click(event.player_index, { ctrl = false, shift = true, alt = false }) then return end
+
    pindex = event.player_index
    if not check_for_player(pindex) then return end
    if players[pindex].in_menu then
@@ -6413,6 +6448,8 @@ end)
 * Control click an empty slot to try to smart transfer ALL items from that inventory.
 ]]
 script.on_event("transfer-all-stacks", function(event)
+   if ui.evt_left_click(event.player_index, { ctrl = true, shift = false, alt = false }) then return end
+
    pindex = event.player_index
    if not check_for_player(pindex) then return end
 
@@ -6425,6 +6462,8 @@ end)
 
 --Default is control clicking
 script.on_event("fa-alternate-build", function(event)
+   if ui.evt_left_click(event.player_index, { ctrl = true, shift = false, alt = false }) then return end
+
    pindex = event.player_index
    if not check_for_player(pindex) then return end
 
@@ -6450,6 +6489,8 @@ end)
 * Control click an empty slot to try to smart transfer HALF of all items from that inventory.
 ]]
 script.on_event("transfer-half-of-all-stacks", function(event)
+   if ui.evt_right_click(event.player_index, { ctrl = true, shift = false, alt = false }) then return end
+
    pindex = event.player_index
    if not check_for_player(pindex) then return end
 
@@ -6593,6 +6634,8 @@ function transfer_inventory(args)
 end
 
 script.on_event("crafting-5", function(event)
+   if ui.evt_right_click(event.player_index, { ctrl = false, shift = false, alt = false }) then return end
+
    pindex = event.player_index
    if not check_for_player(pindex) then return end
    local ent = get_selected_ent(pindex)
@@ -6638,6 +6681,8 @@ script.on_event("crafting-5", function(event)
 end)
 
 script.on_event("menu-clear-filter", function(event)
+   if ui.evt_right_click(event.player_index, { ctrl = false, shift = false, alt = false }) then return end
+
    pindex = event.player_index
    if not check_for_player(pindex) then return end
    local ent = get_selected_ent(pindex)
@@ -6677,6 +6722,8 @@ end)
 
 --Reads the entity status but also adds on extra info depending on the entity
 script.on_event("read-entity-status", function(event)
+   if ui.evt_right_click(event.player_index, { ctrl = false, shift = false, alt = false }) then return end
+
    pindex = event.player_index
    if not check_for_player(pindex) then return end
    local ent = get_selected_ent(pindex)
@@ -7293,13 +7340,19 @@ script.on_load(function()
    building_types = global.building_types
 end)
 
-script.on_configuration_changed(ensure_global_structures_are_up_to_date)
+script.on_configuration_changed(function()
+   ensure_global_structures_are_up_to_date()
+   ui_internal.reset_global()
+end)
+
 script.on_init(function()
    ---@type any
    local skip_intro_message = remote.interfaces["freeplay"]
    skip_intro_message = skip_intro_message and skip_intro_message["set_skip_intro"]
    if skip_intro_message then remote.call("freeplay", "set_skip_intro", true) end
    ensure_global_structures_are_up_to_date()
+
+   ui_internal.reset_global()
 end)
 
 script.on_event(defines.events.on_cutscene_cancelled, function(event)
